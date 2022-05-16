@@ -1,0 +1,60 @@
+// test/MerkleProofVerify.test.js
+// SPDX-License-Identifier: MIT
+// based upon https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v3.0.1/test/cryptography/MerkleProof.test.js
+
+require('@openzeppelin/test-helpers');
+const { ethers } = require("hardhat");
+const chai = require("chai");
+const { expect } = chai;
+const crypto = require('crypto');
+const keccak256 = require('keccak256');
+
+const { MerkleTree } = require('./helper/MerkleTree.js');
+
+// const MerkleProofVerify = artifacts.require('MerkleProofVerify');
+const getPasswordHashedAndUnhashed = (numPass, passLen) => {
+  let unhashed = [];
+  let hashed = [];
+  for (let i = 0; i < numPass; i++) {
+    let curUnhashed = crypto.randomBytes(passLen/2);
+    let curHashed = ethers.BigNumber.from(keccak256(curUnhashed.toString('hex'))).mod(ethers.BigNumber.from(2).pow(64).sub(1));
+    unhashed.push(curUnhashed);
+    hashed.push(curHashed);
+  }
+  return {"hashed": hashed, "unhashed": unhashed};
+}
+
+describe('MerkleProofVerify', function (accounts) {
+    beforeEach(async function () {
+        // this.merkleProofVerify = await MerkleProofVerify.new();
+        const MerkleProofVerify = await ethers.getContractFactory("MerkleProofVerify");
+        [owner, addr1, addr2] = await ethers.getSigners();
+        this.merkleProofVerify = await MerkleProofVerify.deploy();
+        this.hashes = getPasswordHashedAndUnhashed(10, 32);
+    });
+
+    it('should return true for a valid leaf', async function () {
+        const accounts = this.hashes["unhashed"];
+        const elements = [accounts[0], accounts[1], accounts[2], accounts[3]];
+        const merkleTree = new MerkleTree(elements);
+
+       const root = merkleTree.getHexRoot();
+
+       const proof = merkleTree.getHexProof(elements[0]);
+
+       expect(await this.merkleProofVerify.verify(proof, root, {from: accounts[0]})).to.equal(true);
+    });
+
+
+    it('should return false for an invalid leaf', async function () {
+        const accounts = this.hashes["unhashed"];
+        const elements = [accounts[0], accounts[1], accounts[2], accounts[3]];
+        const merkleTree = new MerkleTree(elements);
+
+       const root = merkleTree.getHexRoot();
+
+       const proof = merkleTree.getHexProof(elements[0]);
+
+       expect(await this.merkleProofVerify.verify(proof, root, {from: accounts[4]})).to.equal(false);
+    });
+});
